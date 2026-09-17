@@ -1,22 +1,45 @@
 import { NextResponse } from "next/server";
-import { mkdir, writeFile } from "fs/promises";
-import path from "path";
+import { v2 as cloudinary } from "cloudinary";
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
 export async function POST(req: Request) {
-  const formData = await req.formData();
-  const file = formData.get("file") as File | null;
-
-  if (!file) {
-    return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
+  if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    return NextResponse.json({ error: "Image storage is not configured" }, { status: 503 });
   }
 
-  const bytes = await file.arrayBuffer();
-  const buffer = Buffer.from(bytes);
-  const filename = `${Date.now()}-${file.name.replace(/\s+/g, "-")}`;
-  const uploadDir = path.join(process.cwd(), "public", "uploads");
+  const formData = await req.formData();
+  const file = formData.get("file");
 
-  await mkdir(uploadDir, { recursive: true });
-  await writeFile(path.join(uploadDir, filename), buffer);
+  if (!(file instanceof File) || !file.type.startsWith("image/")) {
+    return NextResponse.json({ error: "Please upload an image" }, { status: 400 });
+  }
 
-  return NextResponse.json({ url: `/uploads/${filename}` });
+  if (file.size > 8 * 1024 * 1024) {
+    return NextResponse.json({ error: "Image must be 8MB or smaller" }, { status: 400 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  const result = await new Promise<{ secure_url: string }>((resolve, reject) => {
+    const upload = cloudinary.uploader.upload_stream(
+      { folder: "sell-marketplace/cars", resource_type: "image" },
+      (error, uploaded) => {
+        if (error || !uploaded) {
+          reject(error || new Error("Upload failed"));
+          return;
+        }
+
+        resolve(uploaded as { secure_url: string });
+      }
+    );
+
+    upload.end(buffer);
+  });
+
+  return NextResponse.json({ url: result.secure_url });
 }

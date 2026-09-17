@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -16,6 +16,7 @@ model User {
   createdAt     DateTime @default(now())
   cars          Car[]
   favorites     Favorite[]
+  payments      Payment[]
 }
 
 model Car {
@@ -36,6 +37,7 @@ model Car {
   seller        User     @relation(fields: [sellerId], references: [id])
   sellerId      Int
   favorites     Favorite[]
+  payments      Payment[]
 }
 
 model Favorite {
@@ -47,4 +49,17 @@ model Favorite {
   createdAt DateTime @default(now())
 
   @@unique([userId, carId])
+}
+
+model Payment {
+  id              Int      @id @default(autoincrement())
+  user            User     @relation(fields: [userId], references: [id])
+  userId          Int
+  car             Car      @relation(fields: [carId], references: [id])
+  carId           Int
+  amount          Int
+  currency        String   @default("usd")
+  status          String   @default("pending")
+  stripeSessionId String   @unique
+  createdAt       DateTime @default(now())
 }
